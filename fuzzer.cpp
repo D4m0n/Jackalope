@@ -29,6 +29,11 @@ limitations under the License.
 #include "directory.h"
 #include "client.h"
 #include "mersenne.h"
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <fstream>
 
 using namespace std;
 
@@ -222,6 +227,77 @@ void Fuzzer::Run(int argc, char **argv) {
   }
 }
 
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+void Fuzzer::SaveLastCrashInfo(CrashInfo& crash_info, std::string crash_filename) {
+  int depth = crash_info.stack_frame_depth;
+  std::string crash_info_name = DirJoin(crash_dir, crash_filename + ".dump");
+  std::ostringstream oss;
+
+  oss << "CONTEXT:\n";
+  oss << "rax=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rax << " ";
+  oss << "rbx=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rbx << " ";
+  oss << "rcx=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rcx << std::endl;
+
+  oss << "rdx=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rdx << " ";
+  oss << "rsi=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rsi << " ";
+  oss << "rdi=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rdi << std::endl;
+
+  oss << "rip=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rip << " ";
+  oss << "rsp=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rsp << " ";
+  oss << "rbp=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.Rbp << std::endl;
+
+  oss << " r8=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R8 << " ";
+  oss << " r9=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R9 << " ";
+  oss << "r10=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R10 << std::endl;
+
+  oss << "r11=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R11 << " ";
+  oss << "r12=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R12 << " ";
+  oss << "r13=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R13 << std::endl;
+
+  oss << "r14=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R14 << " ";
+  oss << "r15=" << std::hex << std::setw(16) << std::setfill('0') << crash_info.context.R15 << std::endl;
+
+  oss << "iopl=" << ((crash_info.context.EFlags >> 12) & 3) << " ";
+  oss << "efl=" << std::hex << std::setw(8) << std::setfill('0') << crash_info.context.EFlags << std::endl;
+
+  oss << "cs=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegCs << " ";
+  oss << "ss=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegSs << " ";
+  oss << "ds=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegDs << " ";
+  oss << "es=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegEs << " ";
+  oss << "fs=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegFs << " ";
+  oss << "gs=" << std::hex << std::setw(4) << std::setfill('0') << crash_info.context.SegGs << std::endl;
+
+  oss << std::endl;
+
+  oss << "STACK_TRACE:\n";
+  for (int i = 0; i < depth; ++i) {
+      if (crash_info.stack_frame_info[i]->module_name[0] != NULL) {
+        if (crash_info.stack_frame_info[i]->function_name[0] != NULL) {
+          oss << crash_info.stack_frame_info[i]->module_name << "!" << crash_info.stack_frame_info[i]->function_name;
+          oss << "+0x" << std::hex << crash_info.stack_frame_info[i]->offset;
+          oss << " (0x" << std::hex << crash_info.stack_frame_info[i]->address << ")";
+          oss << std::endl;
+        } else {
+          oss << crash_info.stack_frame_info[i]->module_name;
+          oss << "+0x" << std::hex << crash_info.stack_frame_info[i]->address - crash_info.stack_frame_info[i]->module_base;
+          oss << std::endl;
+        }
+      } else {
+          oss << "??? (0x" << std::hex << crash_info.stack_frame_info[i]->address << ")";
+          oss << std::endl;
+      }
+  }
+
+  std::ofstream file(crash_info_name);
+  if (file.is_open()) {
+    file << oss.str();
+    file.close();
+  } else {
+    WARN("Error saving crash info");
+  }
+}
+#endif
+
 RunResult Fuzzer::RunSampleAndGetCoverage(ThreadContext *tc, Sample *sample, Coverage *coverage, uint32_t init_timeout, uint32_t timeout) {
   // from this point on, the sample could be filtered
   Sample filteredSample;
@@ -258,6 +334,7 @@ RunResult Fuzzer::RunSampleAndGetCoverage(ThreadContext *tc, Sample *sample, Cov
   RunResult result = tc->instrumentation->Run(tc->target_argc, tc->target_argv, init_timeout, timeout);
   tc->instrumentation->GetCoverage(*coverage, true);
 
+  bool flaky_crash = false;
   // save crashes and hangs immediately when they are detected
   if (result == CRASH) {
     string crash_desc = tc->instrumentation->GetCrashName();
@@ -268,6 +345,7 @@ RunResult Fuzzer::RunSampleAndGetCoverage(ThreadContext *tc, Sample *sample, Cov
             crash_desc = tc->instrumentation->GetCrashName();
         } else {
             crash_desc = "flaky_" + crash_desc;
+            flaky_crash = true;
         }
     }
     
@@ -299,6 +377,12 @@ RunResult Fuzzer::RunSampleAndGetCoverage(ThreadContext *tc, Sample *sample, Cov
       string outfile = DirJoin(crash_dir, crash_filename);
       sample->Save(outfile.c_str());
       output_mutex.Unlock();
+
+      #if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+      if (flaky_crash) {
+        SaveLastCrashInfo(tc->instrumentation->GetLastCrashInfo(), crash_filename);
+      }
+      #endif
 
       if (server) {
         server_mutex.Lock();

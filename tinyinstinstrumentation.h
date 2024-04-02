@@ -44,6 +44,10 @@ public:
 
   std::string GetCrashName() override;
 
+  #if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+  CrashInfo& GetLastCrashInfo() override;
+  #endif
+
 protected:
   LiteCov * instrumentation;
   bool persist;

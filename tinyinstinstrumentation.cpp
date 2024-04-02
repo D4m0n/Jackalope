@@ -185,6 +185,12 @@ std::string TinyInstInstrumentation::GetCrashName() {
   return stream.str();
 }
 
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+CrashInfo& TinyInstInstrumentation::GetLastCrashInfo() {
+  return instrumentation->lastCrashInfo;
+}
+#endif
+
 uint64_t TinyInstInstrumentation::GetReturnValue() {
   return instrumentation->GetTargetReturnValue();
 }

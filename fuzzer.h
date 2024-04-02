@@ -101,6 +101,7 @@ protected:
     PROCESS_SAMPLE,
     FUZZ,
     WAIT,
+  
   };
 
   class SampleQueueEntry {
@@ -261,4 +262,9 @@ protected:
   uint64_t last_save_time;
   
   SampleTrie sample_trie;
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+  private:
+    void SaveLastCrashInfo(CrashInfo& crashInfo, std::string crash_filename);
+#endif
 };

@@ -117,6 +117,10 @@ target_link_libraries(fuzzer fuzzerlib)
 add_executable(test
   test.cpp
   )
+
+add_executable(flaky_test
+  flaky_test.cpp
+)
   
 if(LINUX)
   target_link_libraries(test rt)

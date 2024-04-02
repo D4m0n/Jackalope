@@ -40,8 +40,8 @@ public:
   virtual void IgnoreCoverage(Coverage &coverage) = 0;
 
   virtual std::string GetCrashName() { return "crash"; };
-
   virtual uint64_t GetReturnValue() { return 0; }
+  virtual CrashInfo& GetLastCrashInfo() = 0;
 
   std::string AnonymizeAddress(void* addr);
 };
